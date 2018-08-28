@@ -19,23 +19,23 @@
 </tbody>
 </table>
 <p>为了方便对比，我把使用 EasyReact 和 RAC 的对比做成了一个独立的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/f95ed50c3933c5fa2efc3d04e13ba4127fc41253" target="_blank" rel="noopener">commit f95ed50</a>。可以看到其实从语法上来说，它们的常规使用方法十分的相似。然后我们来一点点比较细节的差异。</p>
-<h1 id="EZNode-vs-RACSignal"><a href="#EZNode-vs-RACSignal" class="headerlink" title="EZNode vs RACSignal"></a>EZNode vs RACSignal</h1><p>RACSignal 的设计概念是表示一个可以被订阅的信号流，最主要的意义是表示其内部的值是变化的。而 RACSubject 是表示一个热信号流，热信号和冷信号的内容后面再说，当前主要先要说的 RACSubject 的特征是可以手动发送信号。</p>
-<p>EZNode 从设计上看上去更像是一个存着 value 的 model，这个使得初学者很容易理解它的用途。而 EZMutableNode 使得 node 存着的 value 可以被修改，然后修改这个 value 的时候就会对外发出信号。说起来我个人觉得这种设计的确可以让过程式编程的开发者更容易理解和过渡到响应式编程中，但是有点略二不像的设计也会带来对应的困扰。</p>
-<h2 id="1-到底-EZNode-的-value-是不是可变的"><a href="#1-到底-EZNode-的-value-是不是可变的" class="headerlink" title="1. 到底 EZNode 的 value 是不是可变的"></a>1. 到底 EZNode 的 value 是不是可变的</h2><p>如果我们认为 EZNode 的 value 是不可变的，那么 EZNode 提供 <code>listenedBy:</code> 就会很奇怪，一个不可变的值我们监听它干什么呢？</p>
-<p>如果我们认为 EZNode 的 value 是可变的，那么有些接口的设计又看上去很怪，典型的代表就是响应式编程最常用到的宏定义 <code>EZR_PATH</code> 的实现类 <code>EZRPathTrampoline</code>，在其内部都默认认为 EZRMutableNode 才可以进行绑定。</p>
-<p>我觉得从总体设计上来看，其实应该认为 EZNode 的 value 值是可变的，<code>EZRNode+Operation.h</code> 中的变换都是基于 EZNode 来实现的可以证明这一点。另一种理解是哪怕是不可变的值，其实也可以变换和监听的嘛，这样看起来 EZNode 的意义和 RACSignal 其实是十分接近的。</p>
+<h1 id="EZRNode-vs-RACSignal"><a href="#EZRNode-vs-RACSignal" class="headerlink" title="EZRNode vs RACSignal"></a>EZRNode vs RACSignal</h1><p>RACSignal 的设计概念是表示一个可以被订阅的信号流，最主要的意义是表示其内部的值是变化的。而 RACSubject 是表示一个热信号流，热信号和冷信号的内容后面再说，当前主要先要说的 RACSubject 的特征是可以手动发送信号。</p>
+<p>EZRNode 从设计上看上去更像是一个存着 value 的 model，这个使得初学者很容易理解它的用途。而 EZRMutableNode 使得 node 存着的 value 可以被修改，然后修改这个 value 的时候就会对外发出信号。说起来我个人觉得这种设计的确可以让过程式编程的开发者更容易理解和过渡到响应式编程中，但是有点略二不像的设计也会带来对应的困扰。</p>
+<h2 id="1-到底-EZRNode-的-value-是不是可变的"><a href="#1-到底-EZRNode-的-value-是不是可变的" class="headerlink" title="1. 到底 EZRNode 的 value 是不是可变的"></a>1. 到底 EZRNode 的 value 是不是可变的</h2><p>如果我们认为 EZRNode 的 value 是不可变的，那么 EZRNode 提供 <code>listenedBy:</code> 就会很奇怪，一个不可变的值我们监听它干什么呢？</p>
+<p>如果我们认为 EZRNode 的 value 是可变的，那么有些接口的设计又看上去很怪，典型的代表就是响应式编程最常用到的宏定义 <code>EZR_PATH</code> 的实现类 <code>EZRPathTrampoline</code>，在其内部都默认认为 EZRMutableNode 才可以进行绑定。</p>
+<p>我觉得从总体设计上来看，其实应该认为 EZRNode 的 value 值是可变的，<code>EZRNode+Operation.h</code> 中的变换都是基于 EZRNode 来实现的可以证明这一点。另一种理解是哪怕是不可变的值，其实也可以变换和监听的嘛，这样看起来 EZRNode 的意义和 RACSignal 其实是十分接近的。</p>
 <p>另外 <code>EZRPathTrampoline.m</code> 里面有个小细节：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">- (void)setObject:(EZRNode *)node forKeyedSubscript:(NSString *)keyPath &#123;</span><br><span class="line">    NSParameterAssert(node);</span><br><span class="line">    NSParameterAssert(keyPath);</span><br><span class="line">    </span><br><span class="line">    EZRMutableNode *keyPathNode = self[keyPath];</span><br><span class="line">    [_cancelBag addCancelable:[keyPathNode syncWith:node]];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>可以看到在头文件里定义的 <code>node</code> 参数是 EZRMutableNode，但是类实现里其实用的是 EZRNode，让我不禁怀疑是不是头文件里的类型写错了……😓</p>
 <p>得出的第一个结论：姑且认为 EZRNode 的意义和 RACSignal 相同，是信号的最基础单元。</p>
-<h2 id="2-EZNode-还是-EZMutableNode"><a href="#2-EZNode-还是-EZMutableNode" class="headerlink" title="2. EZNode 还是 EZMutableNode"></a>2. EZNode 还是 EZMutableNode</h2><p>这个问题和问题1其实有点重叠，主要原因的根源还是宏定义 <code>EZR_PATH</code> 的实现类 <code>EZRPathTrampoline</code>。</p>
-<p>对外暴露 EZNode 类似于对外暴露一个 readonly 的属性，用户表面上可以感知到不可以修改其内部的 value。但是面临的一个问题是，用户想要使用 <code>EZR_PATH</code> 宏进行绑定时还是要进行一次 <code>mutablify</code> 的转换。</p>
-<p>对外直接暴露 EZMutableNode 的话相当于暴露了一个 readwrite 的属性，用户不仅可以监听它，同时也具备了可以修改其 value 的能力，这对于维持一个 ViewModel 的封装性来说可是个灾难。</p>
-<p>还有一点是，EZNode 转成 EZMutableNode 时，复用了原先的内存地址。</p>
+<h2 id="2-EZRNode-还是-EZRMutableNode"><a href="#2-EZRNode-还是-EZRMutableNode" class="headerlink" title="2. EZRNode 还是 EZRMutableNode"></a>2. EZRNode 还是 EZRMutableNode</h2><p>这个问题和问题1其实有点重叠，主要原因的根源还是宏定义 <code>EZR_PATH</code> 的实现类 <code>EZRPathTrampoline</code>。</p>
+<p>对外暴露 EZRNode 类似于对外暴露一个 readonly 的属性，用户表面上可以感知到不可以修改其内部的 value。但是面临的一个问题是，用户想要使用 <code>EZR_PATH</code> 宏进行绑定时还是要进行一次 <code>mutablify</code> 的转换。</p>
+<p>对外直接暴露 EZRMutableNode 的话相当于暴露了一个 readwrite 的属性，用户不仅可以监听它，同时也具备了可以修改其 value 的能力，这对于维持一个 ViewModel 的封装性来说可是个灾难。</p>
+<p>还有一点是，EZRNode 转成 EZRMutableNode 时，复用了原先的内存地址。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">EZRNode *node = [EZRNode new];</span><br><span class="line">EZRMutableNode *mutableNode = [node mutablify];</span><br></pre></td></tr></table></figure>
-<p>上面代码里 <code>node</code> 和 <code>mutableNode</code> 的指针是完全相等的，当然它们的 class 也都会是 EZRMutableNode。这样的好处就是转换前后，它们的逻辑都是连续的；坏处是类型原地转换的逻辑会导致使用方比较混乱（可能前一秒还是 EZRNode 的实例，下一秒就被别人变成 EZMutableNode 了），另外 <code>mutablify</code> 的转换也是不可逆的。</p>
+<p>上面代码里 <code>node</code> 和 <code>mutableNode</code> 的指针是完全相等的，当然它们的 class 也都会是 EZRMutableNode。这样的好处就是转换前后，它们的逻辑都是连续的；坏处是类型原地转换的逻辑会导致使用方比较混乱（可能前一秒还是 EZRNode 的实例，下一秒就被别人变成 EZRMutableNode 了），另外 <code>mutablify</code> 的转换也是不可逆的。</p>
 <p>这样设计应该也是没有办法：虽然说起来它们和 NSString &amp; NSMutableString 组合有很多相似的地方，但是要支持 copy 协议是很麻烦的。比如想要维持监听的链路不被打断，信号源这种东西在支持 copy 时是很容易出大问题的，要复制要维持的状态多得难以想象。</p>
-<p>综上所诉，我们设计接口时到底是暴露 EZNode 还是 EZMutableNode 类型会有很大的困扰。相比较而言，RAC 就没有这个困扰，不想让别人知道这是个可以手动发信号的 RACSubject，包装成 RACSignal 暴露出去就好。其实我还是觉得 EasyReact 去修改下 <code>EZRPathTrampoline</code> 应该也可以达成类似的效果😓。</p>
+<p>综上所诉，我们设计接口时到底是暴露 EZRNode 还是 EZRMutableNode 类型会有很大的困扰。相比较而言，RAC 就没有这个困扰，不想让别人知道这是个可以手动发信号的 RACSubject，包装成 RACSignal 暴露出去就好。其实我还是觉得 EasyReact 去修改下 <code>EZRPathTrampoline</code> 应该也可以达成类似的效果😓。</p>
 <p>不过关于 Node 可变状态的转换的确也没有想到什么好的办法，现在的这个设计模式，即使用 readonly 式的 EZRNode 暴露接口给外界也是形同虚设，毕竟外界拿到这个 EZRNode 之后手动  <code>mutablify</code> 一下，然后想怎么改就怎么改。</p>
 <h2 id="3-冷信号热信号"><a href="#3-冷信号热信号" class="headerlink" title="3. 冷信号热信号"></a>3. 冷信号热信号</h2><p>冷信号一直是 RAC 里面一个让响应式编程新手懵逼的概念，详细的概念我在《<a href="http://blog.harrisonxi.com/2017/09/RAC%E4%B8%AD%E7%9A%84%E5%86%B7%E4%BF%A1%E5%8F%B7%E4%B8%8E%E7%83%AD%E4%BF%A1%E5%8F%B7.html">RAC中的冷信号与热信号</a>》中介绍过。</p>
 <p>既然容易让新手懵逼，那么 EasyReact 是怎么处理的呢？EasyReact 里好像就压根没有提供冷信号的概念😂。</p>
@@ -51,13 +51,13 @@
 <td>✅ 易理解，抛弃了大量对初学者很晦涩的响应式概念</td>
 </tr>
 <tr>
-<td>❌ 框架内部接口的设计对 EZNode &amp; EZMutableNode 的理解貌似本身就不一致</td>
+<td>❌ 框架内部接口的设计对 EZRNode &amp; EZRMutableNode 的理解貌似本身就不一致</td>
 </tr>
 <tr>
 <td>❌ 不可变和可变 node 的无缝转换过程可能引发其它业务方的逻辑混乱</td>
 </tr>
 <tr>
-<td>❌ EZNode 完全做不到 readonly 的效果，形同虚设</td>
+<td>❌ EZRNode 完全做不到 readonly 的效果，形同虚设</td>
 </tr>
 <tr>
 <td>⚠️ 抛弃了冷信号的概念，这个优劣参半吧</td>
@@ -121,7 +121,7 @@
 </tr>
 </tbody>
 </table>
-<h1 id="调试复杂度"><a href="#调试复杂度" class="headerlink" title="调试复杂度"></a>调试复杂度</h1><p>EazyReact 的 EZRNode 概念比起 RACSignal 来说，是确确实实的持有了一个 value 的，所以调试起来有相当大的优势。举几个例子：</p>
+<h1 id="调试复杂度"><a href="#调试复杂度" class="headerlink" title="调试复杂度"></a>调试复杂度</h1><p>EasyReact 的 EZRNode 概念比起 RACSignal 来说，是确确实实的持有了一个 value 的，所以调试起来有相当大的优势。举几个例子：</p>
 <ol>
 <li>可以给 <code>setValue:</code> 加个断点，设置进来的新值和之前的旧值都可以轻松获得。</li>
 <li>任何时机可以方便的直接用 <code>.value</code> 拿到现在的节点值，按照文档描述这个值是线程安全的，放心使用。</li>
