@@ -18,7 +18,7 @@
 </tr>
 </tbody>
 </table>
-<p>为了方便对比，我把使用 EasyReact 和 RAC 的对比做成了一个独立的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/f95ed50c3933c5fa2efc3d04e13ba4127fc41253" target="_blank" rel="noopener">commit f95ed50</a>。可以看到其实从语法上来说，它们的常规使用方法十分的相似。然后我们来一点点比较细节的差异。</p>
+<p>为了方便对比，我把使用 EasyReact 和 RAC 的对比做成了一个独立的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/0feb1cbc35467fb1e75f3c10199d5987ec2cb573" target="_blank" rel="noopener">commit 0feb1cb</a>。可以看到其实从语法上来说，它们的常规使用方法十分的相似。然后我们来一点点比较细节的差异。</p>
 <h1 id="EZRNode-vs-RACSignal"><a href="#EZRNode-vs-RACSignal" class="headerlink" title="EZRNode vs RACSignal"></a>EZRNode vs RACSignal</h1><p>RACSignal 的设计概念是表示一个可以被订阅的信号流，最主要的意义是表示其内部的值是变化的。而 RACSubject 是表示一个热信号流，热信号和冷信号的内容后面再说，当前主要先要说的 RACSubject 的特征是可以手动发送信号。</p>
 <p>EZRNode 从设计上看上去更像是一个存着 value 的 model，这个使得初学者很容易理解它的用途。而 EZRMutableNode 使得 node 存着的 value 可以被修改，然后修改这个 value 的时候就会对外发出信号。说起来我个人觉得这种设计的确可以让过程式编程的开发者更容易理解和过渡到响应式编程中，但是有点略二不像的设计也会带来对应的困扰。</p>
 <h2 id="1-到底-EZRNode-的-value-是不是可变的"><a href="#1-到底-EZRNode-的-value-是不是可变的" class="headerlink" title="1. 到底 EZRNode 的 value 是不是可变的"></a>1. 到底 EZRNode 的 value 是不是可变的</h2><p>如果我们认为 EZRNode 的 value 是不可变的，那么 EZRNode 提供 <code>listenedBy:</code> 就会很奇怪，一个不可变的值我们监听它干什么呢？</p>
@@ -89,7 +89,7 @@
 </tr>
 </tbody>
 </table>
-<h1 id="对系统类的扩展"><a href="#对系统类的扩展" class="headerlink" title="对系统类的扩展"></a>对系统类的扩展</h1><p>基于刚刚提到的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/f95ed50c3933c5fa2efc3d04e13ba4127fc41253" target="_blank" rel="noopener">commit f95ed50</a> 的 MvvmDemo 是不完整的，一个很重要的原因就是 UITextField 这类 UI 控件，是不可以通过监听它的 text 属性就能简单实现响应式的。所以我们必须要一个新的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/fff9624d530a72048ee8659399add858f12c9d55" target="_blank" rel="noopener">commit fff9624</a>，来把 UITextField 依然通过 delegate 的方式链接到 ViewModel 上，说起来就是还是抛弃不了过程式的开发方法。</p>
+<h1 id="对系统类的扩展"><a href="#对系统类的扩展" class="headerlink" title="对系统类的扩展"></a>对系统类的扩展</h1><p>基于刚刚提到的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/0feb1cbc35467fb1e75f3c10199d5987ec2cb573" target="_blank" rel="noopener">commit 0feb1cb</a> 的 MvvmDemo 是不完整的，一个很重要的原因就是 UITextField 这类 UI 控件，是不可以通过监听它的 text 属性就能简单实现响应式的。所以我们必须要一个新的 <a href="https://github.com/HarrisonXi/MvvmDemo/commit/ad46b53d99920a377de01a4da4f95c44022ef896" target="_blank" rel="noopener">commit ad46b53</a>，来把 UITextField 依然通过 delegate 的方式链接到 ViewModel 上，说起来就是还是抛弃不了过程式的开发方法。</p>
 <p>这点我相信美团内部应该还是有对应的一些封装吧，日后或许也会渐渐开源出来。毕竟如果一套响应式框架如果没有办法很便捷的应用到业务层的 UI 上，实用性就会大打折扣。</p>
 <p>相比较来说沉淀了多年的 RAC 强大的多，不光连 UI 控件的扩展封装很完备，还为了具体的场景需要实现了 RACCommand 和 RACChannel 等类，甚至于连 UserDefaults 都做了对应的扩展封装。</p>
 <table>
