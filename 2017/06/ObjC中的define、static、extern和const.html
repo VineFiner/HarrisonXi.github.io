@@ -26,7 +26,7 @@
 <p><img src="/2017/06/01-D.png" alt="01-D"></p>
 <h2 id="静态局部变量（static-local-variables）"><a href="#静态局部变量（static-local-variables）" class="headerlink" title="静态局部变量（static local variables）"></a>静态局部变量（static local variables）</h2><p>定义在函数体内的为静态局部变量，和定义在函数内的普通局部变量一样，在函数外是不可见的。例子如下图：</p>
 <p><img src="/2017/06/01-E.png" alt="01-E"></p>
-<p>要注意这里的<code>static = 0</code>是初始化，并不是赋值，仅会运行一次。</p>
+<p>要注意这里的<code>staticInt = 0</code>是初始化，并不是赋值，仅会运行一次。</p>
 <p>通常来说我们建立单例的时候就应该使用静态局部变量。另外很重要的一点，在创建单例的时候最好用<code>dispatch_once</code>方法避免多线程问题。</p>
 <h1 id="Extern"><a href="#Extern" class="headerlink" title="Extern"></a>Extern</h1><h2 id="同文件的extern扩展"><a href="#同文件的extern扩展" class="headerlink" title="同文件的extern扩展"></a>同文件的extern扩展</h2><p>从纯C开始说起吧，因为同文件的extern一般来说只有纯C里需要：</p>
 <p><img src="/2017/06/01-F.png" alt="01-F"></p>
