@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://blog.harrisonxi.com/"/>
-  <updated>2018-11-28T06:28:34.757Z</updated>
+  <updated>2019-02-28T09:24:12.172Z</updated>
   <id>http://blog.harrisonxi.com/</id>
   
   <author>
@@ -15,6 +15,41 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>字符串比较中NSNumericSearch选项的工作原理</title>
+    <link href="http://blog.harrisonxi.com/2019/02/%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%AF%94%E8%BE%83%E4%B8%ADNSNumericSearch%E9%80%89%E9%A1%B9%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86.html"/>
+    <id>http://blog.harrisonxi.com/2019/02/字符串比较中NSNumericSearch选项的工作原理.html</id>
+    <published>2019-02-27T16:00:00.000Z</published>
+    <updated>2019-02-28T09:24:12.172Z</updated>
+    
+    <content type="html"><![CDATA[<p>相信研究过怎么在 ObjC 中进行版本字符串比对的朋友，大多都看过这一篇 StackOverflow 的问答：</p><p><a href="https://stackoverflow.com/a/1990854/2562905" target="_blank" rel="noopener">Compare version numbers in Objective-C</a></p><p>里面提到的 <code>[versionStrA compare:versionStrB options:NSNumericSearch]</code> 的方案应该是最优雅的方案了。</p><p>但是不理解这个 NSNumericSearch 的具体工作原理就去盲目使用是危险的，今天我就来研究下它的具体工作原理。</p><a id="more"></a><h1 id="官方文档"><a href="#官方文档" class="headerlink" title="官方文档"></a>官方文档</h1><p>参照<a href="https://developer.apple.com/documentation/foundation/nsstringcompareoptions/nsnumericsearch" target="_blank" rel="noopener">官方文档</a>里的说明：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Numbers within strings are compared using numeric value, that is,</span><br><span class="line">Name2.txt &lt; Name7.txt &lt; Name25.txt.</span><br><span class="line"></span><br><span class="line">Numeric comparison only applies to the numerals in the string, not other characters that</span><br><span class="line">would have meaning in a numeric representation such as a negative sign, a comma, or a</span><br><span class="line">decimal point.</span><br></pre></td></tr></table></figure><p>粗略的直译一下：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">在字符串中的数字将被用数值进行比较，就是说，Name2.txt &lt; Name7.txt &lt; Name25.txt。</span><br><span class="line"></span><br><span class="line">数值比较仅仅对字符串中的纯数字（0-9）生效，而不对其它在数字表达中含有意义的字符生效，例如负号，逗号或小数点。</span><br></pre></td></tr></table></figure><p>这段说明略有歧义，导致很多人第一次看的时候被绕晕。例如刚刚那篇 StackOverflow 问答里的 dooleyo 就理解成 <code>&quot;1.2.3&quot;</code> 和 <code>&quot;1.1.12&quot;</code> 进行比较时，会抛弃所有非数字的字符变成 <code>123</code> 和 <code>1112</code> 进行比较，最后得到 <code>&quot;1.2.3&quot; &lt; &quot;1.1.12&quot;</code> 的结论。问答里不少其它朋友也有类似的想法。</p><h1 id="探求真相"><a href="#探求真相" class="headerlink" title="探求真相"></a>探求真相</h1><p>真相只有经过实验才能得到，所以写了一些测试代码来试一下具体的结果：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">- (void)testExample &#123;</span><br><span class="line">    [self compareString:@&quot;1.2.3&quot; andString:@&quot;1.1.12&quot;];</span><br><span class="line">    [self compareString:@&quot;1.8&quot; andString:@&quot;1.7.2.3.55&quot;];</span><br><span class="line">    [self compareString:@&quot;1.44&quot; andString:@&quot;1.5&quot;];</span><br><span class="line">    [self compareString:@&quot;7.4.1&quot; andString:@&quot;7.5&quot;];</span><br><span class="line">&#125;</span><br><span class="line">    </span><br><span class="line">- (void)compareString:(NSString *)stringA andString:(NSString *)stringB &#123;</span><br><span class="line">    NSComparisonResult result = [stringA compare:stringB options:NSNumericSearch];</span><br><span class="line">    switch (result) &#123;</span><br><span class="line">        case NSOrderedDescending:</span><br><span class="line">            NSLog(@&quot;%@ &gt; %@&quot;, stringA, stringB);</span><br><span class="line">            break;</span><br><span class="line">        case NSOrderedAscending:</span><br><span class="line">            NSLog(@&quot;%@ &lt; %@&quot;, stringA, stringB);</span><br><span class="line">            break;</span><br><span class="line">        default:</span><br><span class="line">            NSLog(@&quot;%@ = %@&quot;, stringA, stringB);</span><br><span class="line">            break;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure><p>得到的结果是：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1.2.3 &gt; 1.1.12</span><br><span class="line">1.8 &gt; 1.7.2.3.55</span><br><span class="line">1.44 &gt; 1.5</span><br><span class="line">7.4.1 &lt; 7.5</span><br></pre></td></tr></table></figure><p>看上去结果都是正确的，那么看来 <code>NSNumericSearch</code> 并不是粗暴的去掉所有非数字字符后进行数值比对。</p><p>结合原回答里答主说的一句话：<code>keeping in mind that &quot;1&quot; &lt; &quot;1.0&quot; &lt; &quot;1.0.0&quot;</code>，忽然想到了一些什么，继续进行下一步的实验，得到的结果如下：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">1 &lt; 1.0</span><br><span class="line">1.0 &lt; 1.0.0</span><br><span class="line">a10 &lt; b2</span><br><span class="line">a2 &lt; b10</span><br><span class="line">c10 &gt; b2</span><br><span class="line">c2 &gt; b10</span><br><span class="line">2a &lt; 10b</span><br><span class="line">10a &gt; 2b</span><br><span class="line">2c &lt; 10b</span><br><span class="line">10c &gt; 2b</span><br></pre></td></tr></table></figure><p>大家看到这里应该可以猜到官方文档的意思是什么了，其实文档的意思是整个字串<strong>非数字的部分仍然进行常规的字符比较逻辑，只有在遇到数字的时候会把连续的数字转换成数值再进行比对</strong>。具体的比较过程示例参照下图：</p><p><img src="/2019/02/28-A.png" alt="28-A"></p><p>这时候一些奇特的比对结果就可以解释明白了，比如使用这种比较模式会得出 <code>&quot;01&quot; = &quot;1&quot;</code>。</p><h1 id="继续深入"><a href="#继续深入" class="headerlink" title="继续深入"></a>继续深入</h1><p>那么还剩下一个问题，如果和数字字符比较的是非数字字符，会怎么样？我们可以挑一些 ASCII 码在数字字符周围的字符进行试验，结果如下：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">a/c &lt; a100c</span><br><span class="line">a:c &gt; a100c</span><br><span class="line">a/c &lt; a1c</span><br><span class="line">a:c &gt; a1c</span><br></pre></td></tr></table></figure><p>注意这里出现的部分字符 ASCII 码为：</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">/ = 47</span><br><span class="line">0 = 48</span><br><span class="line">1 = 49</span><br><span class="line">...</span><br><span class="line">9 = 57</span><br><span class="line">: = 58</span><br></pre></td></tr></table></figure><p>可以看出现了比较的字符一边是数字，一边是非数字时，是按照常规的 ASCII 码进行比对的。</p><h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>那么分析到这里就基本结束了，剩下的一些场景类推一下都很容易理解。</p><p>其实在各大 OS 里的文件系统下文件排序用的就是这种比较方法，一开始没有想到这点所以理解上绕了一些弯路。</p><p>用 <code>NSNumericSearch</code> 来进行版本字符串的比对也是十分有效的，不是特殊需要的话就再也不用傻傻的自己分割字符串再分段比较啦。</p>]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;相信研究过怎么在 ObjC 中进行版本字符串比对的朋友，大多都看过这一篇 StackOverflow 的问答：&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://stackoverflow.com/a/1990854/2562905&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Compare version numbers in Objective-C&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;里面提到的 &lt;code&gt;[versionStrA compare:versionStrB options:NSNumericSearch]&lt;/code&gt; 的方案应该是最优雅的方案了。&lt;/p&gt;
+&lt;p&gt;但是不理解这个 NSNumericSearch 的具体工作原理就去盲目使用是危险的，今天我就来研究下它的具体工作原理。&lt;/p&gt;
+    
+    </summary>
+    
+      <category term="ObjC" scheme="http://blog.harrisonxi.com/categories/ObjC/"/>
+    
+    
+      <category term="ObjC" scheme="http://blog.harrisonxi.com/tags/ObjC/"/>
+    
+      <category term="NSNumericSearch" scheme="http://blog.harrisonxi.com/tags/NSNumericSearch/"/>
+    
+      <category term="NSStringCompareOptions" scheme="http://blog.harrisonxi.com/tags/NSStringCompareOptions/"/>
+    
+      <category term="NSString" scheme="http://blog.harrisonxi.com/tags/NSString/"/>
+    
+      <category term="比较" scheme="http://blog.harrisonxi.com/tags/%E6%AF%94%E8%BE%83/"/>
+    
+      <category term="版本" scheme="http://blog.harrisonxi.com/tags/%E7%89%88%E6%9C%AC/"/>
+    
+  </entry>
   
   <entry>
     <title>EasyReact的简单试用及和RAC的对比</title>
@@ -37,11 +72,11 @@
     
       <category term="iOS" scheme="http://blog.harrisonxi.com/tags/iOS/"/>
     
+      <category term="MVVM" scheme="http://blog.harrisonxi.com/tags/MVVM/"/>
+    
       <category term="RAC" scheme="http://blog.harrisonxi.com/tags/RAC/"/>
     
       <category term="Reactive Cocoa" scheme="http://blog.harrisonxi.com/tags/Reactive-Cocoa/"/>
-    
-      <category term="MVVM" scheme="http://blog.harrisonxi.com/tags/MVVM/"/>
     
       <category term="EasyReact" scheme="http://blog.harrisonxi.com/tags/EasyReact/"/>
     
@@ -334,15 +369,15 @@
     
       <category term="iOS" scheme="http://blog.harrisonxi.com/tags/iOS/"/>
     
-      <category term="RAC" scheme="http://blog.harrisonxi.com/tags/RAC/"/>
-    
-      <category term="Reactive Cocoa" scheme="http://blog.harrisonxi.com/tags/Reactive-Cocoa/"/>
-    
       <category term="MVC" scheme="http://blog.harrisonxi.com/tags/MVC/"/>
     
       <category term="MVVM" scheme="http://blog.harrisonxi.com/tags/MVVM/"/>
     
       <category term="设计模式" scheme="http://blog.harrisonxi.com/tags/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/"/>
+    
+      <category term="RAC" scheme="http://blog.harrisonxi.com/tags/RAC/"/>
+    
+      <category term="Reactive Cocoa" scheme="http://blog.harrisonxi.com/tags/Reactive-Cocoa/"/>
     
       <category term="单元测试" scheme="http://blog.harrisonxi.com/tags/%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95/"/>
     
@@ -629,38 +664,6 @@
       <category term="旋转" scheme="http://blog.harrisonxi.com/tags/%E6%97%8B%E8%BD%AC/"/>
     
       <category term="自定义" scheme="http://blog.harrisonxi.com/tags/%E8%87%AA%E5%AE%9A%E4%B9%89/"/>
-    
-  </entry>
-  
-  <entry>
-    <title>iOS系统的键盘window</title>
-    <link href="http://blog.harrisonxi.com/2017/02/iOS%E7%B3%BB%E7%BB%9F%E7%9A%84%E9%94%AE%E7%9B%98window.html"/>
-    <id>http://blog.harrisonxi.com/2017/02/iOS系统的键盘window.html</id>
-    <published>2017-02-13T16:00:00.000Z</published>
-    <updated>2018-06-05T03:52:06.000Z</updated>
-    
-    <content type="html"><![CDATA[<p>具体某些细节内容和我的开源库<a href="https://github.com/HarrisonXi/TopmostView" target="_blank" rel="noopener">TopmostView</a>相关。</p><p>发现这个键盘window需要调研一下的原因，就是在这个开源库调试过程中，发现新建的自定义window连状态栏都能盖住的情况下，居然盖不住键盘。</p><p>让我们从iOS7开始慢慢调研起。</p><a id="more"></a><h1 id="iOS7-8的键盘window"><a href="#iOS7-8的键盘window" class="headerlink" title="iOS7/8的键盘window"></a>iOS7/8的键盘window</h1><p>先写一些日志来方便观察一个App的window结构：</p><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="built_in">UIWindow</span> *win <span class="keyword">in</span> [<span class="built_in">UIApplication</span> sharedApplication].windows) &#123;</span><br><span class="line">    <span class="built_in">NSLog</span>(<span class="string">@"window class: %@, window level: %.0f"</span>, <span class="built_in">NSStringFromClass</span>([win <span class="keyword">class</span>]), win.windowLevel);</span><br><span class="line">    <span class="keyword">for</span> (<span class="built_in">UIView</span> *subview <span class="keyword">in</span> win.subviews) &#123;</span><br><span class="line">        <span class="built_in">NSLog</span>(<span class="string">@"    subview class: %@"</span>, <span class="built_in">NSStringFromClass</span>([subview <span class="keyword">class</span>]));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure><p>在iOS7里运行可能得到以下两种结果：</p><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">window <span class="keyword">class</span>: <span class="built_in">UIWindow</span>, window level: <span class="number">0</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">1</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIPeripheralHostView</span></span><br><span class="line">    subview <span class="keyword">class</span>: TopmostView</span><br></pre></td></tr></table></figure><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">window <span class="keyword">class</span>: <span class="built_in">UIWindow</span>, window level: <span class="number">0</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">1</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIPeripheralHostView</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">2100</span></span><br><span class="line">    subview <span class="keyword">class</span>: TopmostView</span><br></pre></td></tr></table></figure><p>这里window level为0的window就是我们的application window了。通常情况下出现的键盘window的class为UITextEffectsWindow，window level为1，会盖住我们的app界面。在长按文本框出现弹出菜单之后会出现一个window level为2100的UITextEffectsWindow，应该是为了确保可以盖住状态栏和应用内Alert弹窗。</p><p>在这种情况下想要盖住键盘其实比较简单，再创建一个level大于2100的自定义window就可以了。</p><p>iOS8的层次和iOS7基本一致，仅仅是subview的class有变化：</p><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">window <span class="keyword">class</span>: <span class="built_in">UIWindow</span>, window level: <span class="number">0</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">1</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIInputSetContainerView</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">2100</span></span><br><span class="line">    subview <span class="keyword">class</span>: TopmostView</span><br></pre></td></tr></table></figure><p>再深入的话，iOS7和iOS8的键盘window有个区别：iOS7的键盘window是frame始终恒定，通过transform来变换旋转方向。细节可以参考我的后一篇博客，在此不深入讨论。</p><h1 id="iOS9-10的键盘window"><a href="#iOS9-10的键盘window" class="headerlink" title="iOS9/10的键盘window"></a>iOS9/10的键盘window</h1><p>iOS9的window层次如下：</p><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">window <span class="keyword">class</span>: <span class="built_in">UIWindow</span>, window level: <span class="number">0</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">1</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIInputSetContainerView</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UITextEffectsWindow</span>, window level: <span class="number">2100</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UICalloutBar</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIApplicationRotationFollowingControllerView</span></span><br><span class="line">window <span class="keyword">class</span>: <span class="built_in">UIRemoteKeyboardWindow</span>, window level: <span class="number">10000000</span></span><br><span class="line">    subview <span class="keyword">class</span>: <span class="built_in">UIInputSetContainerView</span></span><br><span class="line">    subview <span class="keyword">class</span>: TopmostView</span><br></pre></td></tr></table></figure><p>iOS10仅有一个区别就是UICalloutBar不见了，这个暂时不是关注的重点。</p><p>重点在于多了一个level为1000万的window……导致了我建一个level两千多的window没办法盖住键盘window了。</p><p>建立一个level比1000万还大的window我个人就不太建议了（能不能创建成功是另一码事），所以iOS9之后想要做一些盖住键盘的提示之类，还是建议在这个UIRemoteKeyboardWindow上增加subview来做了。</p><p>比较有趣的事情是，我的开源库是在UITextEffectsWindow上addSubview的，结果实际上这个TopmostView被增加到了UIRemoteKeyboardWindow上。应该是UITextEffectsWindow做了一些代理或者转发的工作，所以按照iOS7/8的逻辑直接在顶层的UITextEffectsWindow上addSubview也可以。</p><h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>App有盖住键盘的提示之类需求，建议的统一方案是从高层往低层逆序遍历所有的window，找到第一个UITextEffectsWindow，在上面新增一个subview然后在这个subview上做剩余的操作。找到这个window的具体代码示例如下：</p><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="built_in">UIWindow</span> *window <span class="keyword">in</span> [[<span class="built_in">UIApplication</span> sharedApplication].windows reverseObjectEnumerator]) &#123;</span><br><span class="line">    <span class="keyword">if</span> ([window isKindOfClass:<span class="built_in">NSClassFromString</span>(<span class="string">@"UITextEffectsWindow"</span>)] &amp;&amp; window.hidden == <span class="literal">NO</span> &amp;&amp; window.alpha &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> window;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> <span class="literal">nil</span>;</span><br></pre></td></tr></table></figure><p>当然还有一些旋转和尺寸问题等着你处理。</p><p>如果你不想自己处理这些，那么请移步至开源库：<a href="https://github.com/HarrisonXi/TopmostView" target="_blank" rel="noopener">TopmostView</a></p>]]></content>
-    
-    <summary type="html">
-    
-      &lt;p&gt;具体某些细节内容和我的开源库&lt;a href=&quot;https://github.com/HarrisonXi/TopmostView&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;TopmostView&lt;/a&gt;相关。&lt;/p&gt;
-&lt;p&gt;发现这个键盘window需要调研一下的原因，就是在这个开源库调试过程中，发现新建的自定义window连状态栏都能盖住的情况下，居然盖不住键盘。&lt;/p&gt;
-&lt;p&gt;让我们从iOS7开始慢慢调研起。&lt;/p&gt;
-    
-    </summary>
-    
-      <category term="iOS" scheme="http://blog.harrisonxi.com/categories/iOS/"/>
-    
-    
-      <category term="iOS" scheme="http://blog.harrisonxi.com/tags/iOS/"/>
-    
-      <category term="开源" scheme="http://blog.harrisonxi.com/tags/%E5%BC%80%E6%BA%90/"/>
-    
-      <category term="window" scheme="http://blog.harrisonxi.com/tags/window/"/>
-    
-      <category term="键盘" scheme="http://blog.harrisonxi.com/tags/%E9%94%AE%E7%9B%98/"/>
-    
-      <category term="keyboard" scheme="http://blog.harrisonxi.com/tags/keyboard/"/>
     
   </entry>
   
